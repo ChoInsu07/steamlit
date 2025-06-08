@@ -20,6 +20,8 @@ load_dotenv()
 json_creds = os.getenv("GOOGLE_CREDENTIALS_JSON")
 info = json.loads(json_creds)
 
+info["private_key"] = info["private_key"].replace("\\n", "\n")
+
 # 구글 시트 인증
 creds = Credentials.from_service_account_info(info, scopes=["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"])
 client = gspread.authorize(creds)
