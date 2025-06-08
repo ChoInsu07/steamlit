@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 st.set_page_config(layout="wide")
 from streamlit_folium import st_folium
@@ -10,11 +11,17 @@ from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 import altair as alt
 import json
+from dotenv import load_dotenv
+from google.oauth2.service_account import Credentials 
 
+#.env 파일 읽기
+load_dotenv()
+
+json_creds = os.getenv("GOOGLE_CREDENTIALS_JSON")
+info = json.loads(json_creds)
 
 # 구글 시트 인증
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("global-wharf-462313-r1-2a230934401e.json", scope)
+creds = Credentials.from_service_account_info(info, scopes=["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"])
 client = gspread.authorize(creds)
 
 # 구글 시트 열기 (제목으로)
