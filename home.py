@@ -81,7 +81,6 @@ if "complaints" not in st.session_state:
 
         complaint_obj = Complaint(author, content, coords, date)
         st.session_state.complaints.append(complaint_obj)
-        st.write("시트에서 가져온 데이터:", data)
 
 #---------------여기서 시작---------------------------
 
@@ -197,5 +196,3 @@ if st.session_state.complaints:
     st.altair_chart(chart)
 else:
     st.info("등록된 민원이 없습니다.")
-
-st.write("현재 complaints 리스트:", st.session_state.complaints)
