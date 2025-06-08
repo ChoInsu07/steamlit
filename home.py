@@ -9,24 +9,19 @@ from oauth2client.service_account import ServiceAccountCredentials
 #민원수 plot
 import pandas as pd
 import altair as alt
+import json
 
 
 # 구글 시트 인증
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("global-wharf-462313-r1-15cf2a330dba.json", scope)
+creds = ServiceAccountCredentials.from_json_keyfile_name("global-wharf-462313-r1-2a230934401e.json", scope)
 client = gspread.authorize(creds)
 
 # 구글 시트 열기 (제목으로)
-spreadsheet = client.open("민원 정보")
+spreadsheet = client.open("민원정보")
 worksheet = spreadsheet.sheet1
 
-# 제목
-st.title("민원 등록 시스템")
-
-# 지도1.5:입력창1
-left, right = st.columns([1.5, 1])
-
-# 민원 클래스 정의
+#----------------- 민원 클래스 및 함수 정의 -------------------
 class Complaint:
     def __init__(self, author, content, coords, date):
         self.author = author
@@ -44,12 +39,48 @@ def complaint_to_list(complaint: Complaint):
     return [
         complaint.author,
         complaint.content,
-        str(complaint.coords),
+        json.dumps(complaint.coords),
         str(complaint.date)
     ]
-    
+
+
+#----------------------------------------------------------
+
+# 앱 첫 실행 때만 세션 상태 complaints 초기화 및 구글 시트 데이터 로딩
 if "complaints" not in st.session_state:
     st.session_state.complaints = []
+    data = worksheet.get_all_records()
+
+    for row in data:
+        author = row.get('author', '').strip()
+        content = row.get('content', '').strip()
+        coords_str = row.get('coords', '{}')
+        date_str = row.get('date', '')
+
+        if not author or not content:
+            continue  # 비어 있는 줄은 무시
+
+        try:
+            coords = json.loads(coords_str)
+        except:
+            coords = {}
+
+        try:
+            date = pd.to_datetime(date_str).date()
+        except:
+            date = datetime.date.today()
+
+        complaint_obj = Complaint(author, content, coords, date)
+        st.session_state.complaints.append(complaint_obj)
+        st.write("시트에서 가져온 데이터:", data)
+
+#---------------여기서 시작---------------------------
+
+# 제목
+st.title("민원 등록 시스템")
+
+# 지도1.5:입력창1
+left, right = st.columns([1.5, 1])
             
 # 지도 생성
 m = folium.Map(
@@ -62,16 +93,24 @@ m = folium.Map(
 
 for complaint in st.session_state.complaints:
     coords = complaint.coords
-    folium.CircleMarker(
-        location=[coords['lat'], coords['lng']],
-        radius=7,
-        color='blue',
-        fill=True,
-        fill_color='cyan',
-        popup=(f"작성자: {complaint.author}<br>"
-               f"내용: {complaint.content}<br>"
-               f"날짜: {complaint.date}")
-    ).add_to(m)
+    if (
+        isinstance(coords, dict)
+        and 'lat' in coords and 'lng' in coords
+        and isinstance(coords['lat'], (int, float))
+        and isinstance(coords['lng'], (int, float))
+    ):
+        folium.CircleMarker(
+            location=[coords['lat'], coords['lng']],
+            radius=7,
+            color='blue',
+            fill=True,
+            fill_color='cyan',
+            popup=(f"작성자: {complaint.author}<br>"
+                   f"내용: {complaint.content}<br>"
+                   f"날짜: {complaint.date}")
+        ).add_to(m)
+    else:
+        pass
 
 with left:
     st.write("지도를 클릭해서 민원을 시작하세요.")
@@ -83,9 +122,6 @@ if map_data and map_data.get("last_clicked"):
     clicked_coords = map_data["last_clicked"]
     st.write(f"선택된 좌표: 위도 {clicked_coords['lat']}, 경도 {clicked_coords['lng']}")
     st.session_state.clicked_coords = clicked_coords
-
-# 그 아래에서
-clicked_coords = st.session_state.get('clicked_coords', None)
 
 with right:
     st.subheader("민원 작성")
@@ -112,6 +148,7 @@ search_author = st.text_input("작성자 이름을 입력하여 민원 조회")
 
 if search_author:
     filtered = [c for c in st.session_state.complaints if c.author == search_author]
+
     if filtered:
         for c in filtered:
             st.markdown(f"""
@@ -129,16 +166,15 @@ st.markdown("---")
 st.subheader("날짜별 민원 수")
 
 if st.session_state.complaints:
-    # 민원 날짜 추출
     dates = [c.date for c in st.session_state.complaints]
-    
-    # 데이터프레임 생성 및 날짜별 민원 수 집계
-    df = pd.DataFrame({'date': dates})
-    counts = df.groupby('date').size().reset_index(name='count')
-    
+    df_dates = pd.DataFrame({'date': dates})
+    counts = df_dates.groupby('date').size().reset_index(name='count')
+    counts['count'] = counts['count'].fillna(0)  # NaN 방지
+
     max_count = counts['count'].max()
-    
-    # Altair 바 차트 생성 (y축 0부터 시작)
+    if pd.isna(max_count):
+        max_count = 0
+
     chart = (
         alt.Chart(counts)
         .mark_bar()
@@ -149,7 +185,8 @@ if st.session_state.complaints:
         )
         .properties(width=700, height=300)
     )
-    
     st.altair_chart(chart)
 else:
     st.info("등록된 민원이 없습니다.")
+
+st.write("현재 complaints 리스트:", st.session_state.complaints)
